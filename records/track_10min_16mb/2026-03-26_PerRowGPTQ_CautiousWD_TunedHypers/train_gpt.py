@@ -72,7 +72,7 @@ class Hyperparameters:
     muon_beta2 = float(os.environ.get("MUON_BETA2", 0.95))
     swa_enabled = bool(int(os.environ.get("SWA_ENABLED", "1")))
     swa_every = int(os.environ.get("SWA_EVERY", 50))
-    lawa_enabled = bool(int(os.environ.get("LAWA_ENABLED", "0")))
+    lawa_enabled = bool(int(os.environ.get("LAWA_ENABLED", "1")))
     lawa_k = int(os.environ.get("LAWA_K", 10))
     lawa_freq = int(os.environ.get("LAWA_FREQ", 100))
     muon_wd = float(os.environ.get("MUON_WD", 0.04))
@@ -99,7 +99,8 @@ class Hyperparameters:
     ttt_batch_seqs = int(os.environ.get("TTT_BATCH_SEQS", 32))
     ttt_grad_clip = float(os.environ.get("TTT_GRAD_CLIP", 1.0))
     cautious_wd = bool(int(os.environ.get("CAUTIOUS_WD", "1")))
-    adaptive_quant_bits = os.environ.get("ADAPTIVE_QUANT_BITS", "")  # e.g. "6,6,6,6,6,6,7,7,7,7,7"
+    adaptive_quant_bits = os.environ.get("ADAPTIVE_QUANT_BITS", "")
+    d2z_schedule = bool(int(os.environ.get("D2Z_SCHEDULE", "0")))  # e.g. "6,6,6,6,6,6,7,7,7,7,7"
 
 # --- Batched Newton-Schulz orthogonalization ---
 
@@ -122,7 +123,7 @@ def zeropower_via_newtonschulz5(G: Tensor, steps: int = 5, eps: float = 1e-7) ->
         X = X.mT
     if was_2d:
         X = X.squeeze(0)
-    return X
+    return F.normalize(X, dim=-1) if X.ndim == 2 else F.normalize(X, dim=-1)
 
 # --- Parallel Muon optimizer ---
 
@@ -1253,6 +1254,33 @@ def _classify_param(name: str) -> str:
     if ".attn." in name or (".proj." in name and ".mlp." not in name):
         return "attn"
     return "other"
+def _hadamard_rotate(W: Tensor) -> tuple[Tensor, Tensor]:
+    n = W.shape[-1]
+    if n & (n - 1) != 0:
+        return W, torch.ones(n, device=W.device)
+    signs = (torch.randint(0, 2, (n,), device=W.device, generator=torch.Generator(device=W.device).manual_seed(42)) * 2 - 1).float()
+    x = W.float() * signs
+    h = 1
+    while h < n:
+        x_even, x_odd = x[..., 0::2*h], x[..., h::2*h] if 2*h <= n else (x, x)
+        x = x.clone()
+        for s in range(0, n, 2*h):
+            a, b = x[..., s:s+h], x[..., s+h:s+2*h]
+            x[..., s:s+h], x[..., s+h:s+2*h] = a + b, a - b
+        h *= 2
+    return x / math.sqrt(n), signs
+
+def _hadamard_inv(W: Tensor, signs: Tensor) -> Tensor:
+    n = W.shape[-1]
+    x = W.float()
+    h = 1
+    while h < n:
+        for s in range(0, n, 2*h):
+            a, b = x[..., s:s+h], x[..., s+h:s+2*h]
+            x[..., s:s+h], x[..., s+h:s+2*h] = (a + b) / 2, (a - b) / 2
+        h *= 2
+    return x * signs
+
 def quantize_int6_per_row(t: Tensor, clip_range: int = 31) -> tuple[Tensor, Tensor]:
     t32 = t.float()
     if t32.ndim == 2:
@@ -1374,10 +1402,13 @@ def mixed_quantize_int6(state_dict: dict[str, Tensor], int6_cats: set[str], adap
         if cat in int6_cats and t.ndim >= 1:
             bits = _get_layer_bits(name, adaptive_bits_str)
             clip = (2 ** (bits - 1)) - 1
-            q, s = quantize_int6_per_row(t, clip_range=clip)
+            t_rot, signs = _hadamard_rotate(t) if t.ndim == 2 and t.shape[-1] & (t.shape[-1]-1) == 0 else (t, None)
+            q, s = quantize_int6_per_row(t_rot, clip_range=clip)
             result[name + ".q"] = q
             result[name + ".scale"] = s
-            meta[name] = {"type": "int6"}
+            if signs is not None:
+                result[name + ".hsigns"] = signs.to(torch.int8)
+            meta[name] = {"type": "int6", "hadamard": signs is not None}
         else:
             q, s = quantize_float_tensor(t)
             result[name + ".q"] = q
@@ -1622,6 +1653,10 @@ def main() -> None:
             opt.zero_grad(set_to_none=True)
     max_wallclock_ms = 1000.0 * args.max_wallclock_seconds if args.max_wallclock_seconds > 0 else None
     def lr_mul(step: int, elapsed_ms: float) -> float:
+        if args.d2z_schedule:
+            if max_wallclock_ms is not None:
+                return max(1.0 - elapsed_ms / max_wallclock_ms, 0.0)
+            return max(1.0 - step / max(args.iterations, 1), 0.0)
         if args.warmdown_iters <= 0:
             return 1.0
         if max_wallclock_ms is None:
@@ -1820,7 +1855,18 @@ def main() -> None:
     quant_buf = io.BytesIO()
     torch.save({"w": quant_result, "m": quant_meta}, quant_buf)
     quant_raw = quant_buf.getvalue()
-    quant_blob = lzma.compress(quant_raw, preset=6)
+    hi = bytes(b >> 4 for b in quant_raw)
+    lo = bytes(b & 0x0F for b in quant_raw)
+    hi_c = lzma.compress(hi, preset=6)
+    lo_c = lzma.compress(lo, preset=6)
+    plain_c = lzma.compress(quant_raw, preset=6)
+    if len(hi_c) + len(lo_c) + 8 < len(plain_c):
+        import struct
+        quant_blob = b"NIBL" + struct.pack("<I", len(hi_c)) + hi_c + lo_c
+        log0(f"zipnn:nibble_split saved {len(plain_c) - len(quant_blob)} bytes")
+    else:
+        quant_blob = plain_c
+        log0("zipnn:plain_lzma (nibble split not beneficial)")
     if master_process:
         with open("final_model.int6.ptz", "wb") as f:
             f.write(quant_blob)
@@ -1832,10 +1878,15 @@ def main() -> None:
         dist.barrier()
     with open("final_model.int6.ptz", "rb") as f:
         quant_blob_disk = f.read()
-    quant_state = torch.load(
-        io.BytesIO(lzma.decompress(quant_blob_disk)),
-        map_location="cpu",
-    )
+    if quant_blob_disk[:4] == b"NIBL":
+        import struct
+        hi_len = struct.unpack("<I", quant_blob_disk[4:8])[0]
+        hi = lzma.decompress(quant_blob_disk[8:8+hi_len])
+        lo = lzma.decompress(quant_blob_disk[8+hi_len:])
+        quant_raw_disk = bytes((h << 4) | l for h, l in zip(hi, lo))
+    else:
+        quant_raw_disk = lzma.decompress(quant_blob_disk)
+    quant_state = torch.load(io.BytesIO(quant_raw_disk), map_location="cpu")
     deq_unbanked = dequantize_mixed_int6(quant_state["w"], quant_state["m"], unbanked_sd)
     # Re-bank the dequantized tensors
     deq_state = _rebank_state_dict(deq_unbanked, args.num_layers, sd_cpu)
