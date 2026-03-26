@@ -7,8 +7,8 @@ mkdir -p /workspace/logs
 run_exp() {
   local name=$1; shift
   echo ">>> START $name at $(date -u +%H:%M:%S)"
-  PYTHONUNBUFFERED=1 SEED=1337 EMA_ENABLED=0 TTT_ENABLED=0 "$@" torchrun --standalone --nproc_per_node=1 $SCRIPT 2>&1 | tee /workspace/logs/${name}.txt
-  bpb=$(grep "val_bpb" /workspace/logs/${name}.txt | tail -1 | grep -oE "val_bpb:[0-9.]+" | cut -d: -f2)
+  PYTHONUNBUFFERED=1 SEED=1337 EMA_ENABLED=0 TTT_ENABLED=0 EVAL_STRIDE=0 "$@" torchrun --standalone --nproc_per_node=1 $SCRIPT 2>&1 | tee /workspace/logs/${name}.txt
+  bpb=$(grep "stopping_early\|^step:.*val_bpb" /workspace/logs/${name}.txt | tail -1 | sed 's/.*val_bpb:\([0-9.]*\).*/\1/')
   echo ">>> RESULT $name val_bpb=$bpb"
   echo "$name $bpb" >> /workspace/logs/results.tsv
 }
