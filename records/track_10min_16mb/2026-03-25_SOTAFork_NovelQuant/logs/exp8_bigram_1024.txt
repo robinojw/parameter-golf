@@ -1,0 +1,23 @@
+
+
+|  _  / | | | '_ \| '_ \ / _ \ / _` |
+| | \ \ |_| | | | | |_) | (_) | (_| |
+                  | |                
+                  |_|                
+
+
+[?2004lstep:0/20000 val_loss:6.9290 val_bpb:4.1038 train_time:0ms step_avg:0.01ms
+step:1/20000 train_loss:6.9302 train_time:621ms step_avg:621.32ms
+step:2/20000 train_loss:8.6378 train_time:1197ms step_avg:598.68ms
+step:3/20000 train_loss:8.2481 train_time:1827ms step_avg:609.11ms
+step:4/20000 train_loss:7.6328 train_time:2451ms step_avg:612.63ms
+step:5/20000 train_loss:7.0576 train_time:3080ms step_avg:615.91ms
+step:6/20000 train_loss:6.6710 train_time:3706ms step_avg:617.61ms
+step:7/20000 train_loss:6.3646 train_time:4331ms step_avg:618.75ms
+step:8/20000 train_loss:6.1362 train_time:4959ms step_avg:619.83ms
+step:9/20000 train_loss:5.9994 train_time:5583ms step_avg:620.38ms
+step:10/20000 train_loss:5.9061 train_time:6213ms step_avg:621.28ms
+step:500/20000 train_loss:2.4305 train_time:313568ms step_avg:627.14ms
+step:500/20000 val_loss:2.4547 val_bpb:1.4538 train_time:313664ms step_avg:627.33ms
+XENDLOGX
+[?2004lexit

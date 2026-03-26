@@ -1,0 +1,26 @@
+
+
+|  _  / | | | '_ \| '_ \ / _ \ / _` |
+| | \ \ |_| | | | | |_) | (_) | (_| |
+                  | |                
+                  |_|                
+
+
+[?2004lstep:0/20000 val_loss:6.9309 val_bpb:4.1049 train_time:0ms step_avg:0.01ms
+step:1/20000 train_loss:6.9313 train_time:623ms step_avg:622.73ms
+step:2/20000 train_loss:8.6747 train_time:1198ms step_avg:599.09ms
+step:3/20000 train_loss:8.2547 train_time:1832ms step_avg:610.73ms
+step:4/20000 train_loss:7.6174 train_time:2455ms step_avg:613.80ms
+step:5/20000 train_loss:7.0246 train_time:3084ms step_avg:616.71ms
+step:6/20000 train_loss:6.6274 train_time:3709ms step_avg:618.23ms
+step:7/20000 train_loss:6.3133 train_time:4333ms step_avg:619.01ms
+step:8/20000 train_loss:6.0895 train_time:4962ms step_avg:620.20ms
+step:9/20000 train_loss:5.9718 train_time:5586ms step_avg:620.71ms
+step:10/20000 train_loss:5.8742 train_time:6214ms step_avg:621.37ms
+step:500/20000 train_loss:2.4398 train_time:314426ms step_avg:628.85ms
+step:500/20000 val_loss:2.4650 val_bpb:1.4599 train_time:314558ms step_avg:629.12ms
+step:952/20000 val_loss:2.3104 val_bpb:1.3683 train_time:600264ms step_avg:630.53ms
+stopping_early: wallclock_cap train_time:600264ms step:952/20000
+peak memory allocated: 21626 MiB reserved: 22100 MiB
+XENDLOGX
+[?2004lexit
