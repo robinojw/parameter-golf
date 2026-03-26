@@ -1265,7 +1265,7 @@ def _hadamard_rotate(W: Tensor) -> tuple[Tensor, Tensor]:
         x_even, x_odd = x[..., 0::2*h], x[..., h::2*h] if 2*h <= n else (x, x)
         x = x.clone()
         for s in range(0, n, 2*h):
-            a, b = x[..., s:s+h], x[..., s+h:s+2*h]
+            a, b = x[..., s:s+h].clone(), x[..., s+h:s+2*h].clone()
             x[..., s:s+h], x[..., s+h:s+2*h] = a + b, a - b
         h *= 2
     return x / math.sqrt(n), signs
@@ -1276,10 +1276,10 @@ def _hadamard_inv(W: Tensor, signs: Tensor) -> Tensor:
     h = 1
     while h < n:
         for s in range(0, n, 2*h):
-            a, b = x[..., s:s+h], x[..., s+h:s+2*h]
-            x[..., s:s+h], x[..., s+h:s+2*h] = (a + b) / 2, (a - b) / 2
+            a, b = x[..., s:s+h].clone(), x[..., s+h:s+2*h].clone()
+            x[..., s:s+h], x[..., s+h:s+2*h] = a + b, a - b
         h *= 2
-    return x * signs
+    return (x / math.sqrt(n)) * signs
 
 def quantize_int6_per_row(t: Tensor, clip_range: int = 31) -> tuple[Tensor, Tensor]:
     t32 = t.float()
