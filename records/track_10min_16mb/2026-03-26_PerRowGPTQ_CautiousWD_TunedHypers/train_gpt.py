@@ -1402,13 +1402,10 @@ def mixed_quantize_int6(state_dict: dict[str, Tensor], int6_cats: set[str], adap
         if cat in int6_cats and t.ndim >= 1:
             bits = _get_layer_bits(name, adaptive_bits_str)
             clip = (2 ** (bits - 1)) - 1
-            t_rot, signs = _hadamard_rotate(t) if t.ndim == 2 and t.shape[-1] & (t.shape[-1]-1) == 0 else (t, None)
-            q, s = quantize_int6_per_row(t_rot, clip_range=clip)
+            q, s = quantize_int6_per_row(t, clip_range=clip)
             result[name + ".q"] = q
             result[name + ".scale"] = s
-            if signs is not None:
-                result[name + ".hsigns"] = signs.to(torch.int8)
-            meta[name] = {"type": "int6", "hadamard": signs is not None}
+            meta[name] = {"type": "int6"}
         else:
             q, s = quantize_float_tensor(t)
             result[name + ".q"] = q
