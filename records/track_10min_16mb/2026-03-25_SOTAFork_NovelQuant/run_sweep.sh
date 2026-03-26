@@ -3,11 +3,14 @@ cd /workspace/parameter-golf
 SCRIPT=records/track_10min_16mb/2026-03-25_SOTAFork_NovelQuant/train_gpt.py
 mkdir -p /workspace/logs
 
+BASE_ENV="PYTHONUNBUFFERED=1 SEED=1337 EMA_ENABLED=0 TTT_ENABLED=0 EVAL_STRIDE=0 VAL_LOSS_EVERY=500"
+
 run_exp() {
   local name=$1; shift
   echo ">>> START $name at $(date -u +%H:%M:%S)"
-  PYTHONUNBUFFERED=1 SEED=1337 EMA_ENABLED=0 TTT_ENABLED=0 EVAL_STRIDE=0 "$@" torchrun --standalone --nproc_per_node=1 $SCRIPT 2>&1 | tee /workspace/logs/${name}.txt
-  bpb=$(grep "step:.*val_bpb:" /workspace/logs/${name}.txt | tail -1 | sed 's/.*val_bpb:\([0-9.]*\).*/\1/' || echo "FAILED")
+  env $BASE_ENV "$@" torchrun --standalone --nproc_per_node=1 $SCRIPT 2>&1 | tee /workspace/logs/${name}.txt
+  bpb=$(grep "val_bpb:" /workspace/logs/${name}.txt | grep -v "enabled" | tail -1 | sed 's/.*val_bpb:\([0-9.]*\).*/\1/')
+  if [ -z "$bpb" ]; then bpb="PARSE_FAILED"; fi
   echo ">>> RESULT $name val_bpb=$bpb"
   echo "$name $bpb" >> /workspace/logs/results.tsv
 }
