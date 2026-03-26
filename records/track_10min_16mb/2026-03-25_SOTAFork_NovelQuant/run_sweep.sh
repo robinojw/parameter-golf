@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 cd /workspace/parameter-golf
 SCRIPT=records/track_10min_16mb/2026-03-25_SOTAFork_NovelQuant/train_gpt.py
 mkdir -p /workspace/logs
@@ -8,7 +7,7 @@ run_exp() {
   local name=$1; shift
   echo ">>> START $name at $(date -u +%H:%M:%S)"
   PYTHONUNBUFFERED=1 SEED=1337 EMA_ENABLED=0 TTT_ENABLED=0 EVAL_STRIDE=0 "$@" torchrun --standalone --nproc_per_node=1 $SCRIPT 2>&1 | tee /workspace/logs/${name}.txt
-  bpb=$(grep "stopping_early\|^step:.*val_bpb" /workspace/logs/${name}.txt | tail -1 | sed 's/.*val_bpb:\([0-9.]*\).*/\1/')
+  bpb=$(grep "step:.*val_bpb:" /workspace/logs/${name}.txt | tail -1 | sed 's/.*val_bpb:\([0-9.]*\).*/\1/' || echo "FAILED")
   echo ">>> RESULT $name val_bpb=$bpb"
   echo "$name $bpb" >> /workspace/logs/results.tsv
 }
